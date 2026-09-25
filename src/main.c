@@ -6,8 +6,8 @@
 #include "raycast.h"
 #include "render.h"
 
-#define MOVE_SPEED  45   /* Smooth movement speed in 8.8 fixed units */
-#define TURN_SPEED  6    /* Smooth turning speed (~8.5 deg per frame) */
+#define MOVE_SPEED  50   /* Smooth movement speed in 8.8 fixed units */
+#define TURN_SPEED  7    /* Smooth turning speed (~10 deg per frame) */
 
 /* SID chip registers for sound effects */
 #define SID_V1_FREQ_LO  (*(volatile unsigned char*)0xD400)
@@ -17,15 +17,13 @@
 #define SID_V1_SR       (*(volatile unsigned char*)0xD406)
 #define SID_VOL         (*(volatile unsigned char*)0xD418)
 
-static unsigned char key_w = 0;
-static unsigned char key_s = 0;
-static unsigned char key_a = 0;
-static unsigned char key_d = 0;
-static unsigned char key_q = 0;
-static unsigned char key_e = 0;
-static unsigned char key_space = 0;
-static unsigned char key_m = 0;
-static unsigned char key_x = 0;
+static unsigned char joy_up = 0;
+static unsigned char joy_down = 0;
+static unsigned char joy_left = 0;
+static unsigned char joy_right = 0;
+static unsigned char joy_fire = 0;
+static unsigned char key_map = 0;
+static unsigned char key_exit = 0;
 
 static void play_step_sound(void) {
     SID_VOL = 15;
@@ -44,7 +42,7 @@ static void try_move(fixed dx, fixed dy) {
     unsigned char cur_x = (unsigned char)(player_x >> FP_SHIFT);
     unsigned char cur_y = (unsigned char)(player_y >> FP_SHIFT);
 
-    /* Wall sliding collision detection with bounds checking */
+    /* Wall sliding collision detection */
     if (tx < MAP_WIDTH && game_map[cur_y][tx] == TILE_EMPTY) {
         player_x = new_x;
     }
@@ -53,74 +51,42 @@ static void try_move(fixed dx, fixed dy) {
     }
 }
 
-/* Fast direct CIA1 keyboard matrix scan for continuous, zero-delay WASD */
-static void scan_keyboard(void) {
-    unsigned char val;
+/* Read Joystick 2 (CIA1 Port A $DC00) and keyboard */
+static void read_controls(void) {
     unsigned char joy;
 
-    key_w = key_s = key_a = key_d = key_q = key_e = key_space = key_m = key_x = 0;
+    joy_up = joy_down = joy_left = joy_right = joy_fire = key_map = key_exit = 0;
 
-    /* Row 1 ($FD): W (bit 1), A (bit 2), S (bit 5), E (bit 6) */
-    CIA1_PRA = 0xFD;
-    val = CIA1_PRB;
-    if (!(val & 0x02)) key_w = 1;
-    if (!(val & 0x04)) key_a = 1;
-    if (!(val & 0x20)) key_s = 1;
-    if (!(val & 0x40)) key_e = 1;
-
-    /* Row 2 ($FB): D (bit 2), X (bit 7) */
-    CIA1_PRA = 0xFB;
-    val = CIA1_PRB;
-    if (!(val & 0x04)) key_d = 1;
-    if (!(val & 0x80)) key_x = 1;
-
-    /* Row 4 ($EF): M (bit 4) */
-    CIA1_PRA = 0xEF;
-    val = CIA1_PRB;
-    if (!(val & 0x10)) key_m = 1;
-
-    /* Row 7 ($7F): Space (bit 4), Q (bit 6) */
-    CIA1_PRA = 0x7F;
-    val = CIA1_PRB;
-    if (!(val & 0x10)) key_space = 1;
-    if (!(val & 0x40)) key_q = 1;
-
-    /* Restore CIA1 Port A */
-    CIA1_PRA = 0x7F;
-
-    /* Also check Joystick in Port 2 */
+    /* 1. Read Commodore 64 Joystick in Port 2 ($DC00) */
     joy = JOYSTICK_PORT2;
-    if (!(joy & 0x01)) key_w = 1;     /* Up */
-    if (!(joy & 0x02)) key_s = 1;     /* Down */
-    if (!(joy & 0x04)) key_a = 1;     /* Left */
-    if (!(joy & 0x08)) key_d = 1;     /* Right */
-    if (!(joy & 0x10)) key_space = 1; /* Fire */
+    if (!(joy & 0x01)) joy_up = 1;     /* Up */
+    if (!(joy & 0x02)) joy_down = 1;   /* Down */
+    if (!(joy & 0x04)) joy_left = 1;   /* Left */
+    if (!(joy & 0x08)) joy_right = 1;  /* Right */
+    if (!(joy & 0x10)) joy_fire = 1;   /* Fire button */
 
-    /* KERNAL keyboard buffer fallback */
+    /* 2. Check Keyboard input (WASD / Arrows / M / X) */
     while (kbhit()) {
         char ch = cgetc();
-        if (ch == 'w' || ch == 'W' || ch == 145) key_w = 1;
-        else if (ch == 's' || ch == 'S' || ch == 17) key_s = 1;
-        else if (ch == 'a' || ch == 'A' || ch == 157) key_a = 1;
-        else if (ch == 'd' || ch == 'D' || ch == 29) key_d = 1;
-        else if (ch == 'q' || ch == 'Q') key_q = 1;
-        else if (ch == 'e' || ch == 'E') key_e = 1;
-        else if (ch == 'm' || ch == 'M') key_m = 1;
-        else if (ch == ' ') key_space = 1;
-        else if (ch == 'x' || ch == 'X') key_x = 1;
+        if (ch == 'w' || ch == 'W' || ch == 145) joy_up = 1;
+        else if (ch == 's' || ch == 'S' || ch == 17) joy_down = 1;
+        else if (ch == 'a' || ch == 'A' || ch == 157) joy_left = 1;
+        else if (ch == 'd' || ch == 'D' || ch == 29) joy_right = 1;
+        else if (ch == ' ' || ch == 13) joy_fire = 1;
+        else if (ch == 'm' || ch == 'M') key_map = 1;
+        else if (ch == 'x' || ch == 'X') key_exit = 1;
     }
 }
 
 int main(void) {
     unsigned char map_mode = 0;
-    unsigned char last_key_m = 0;
-    unsigned char last_key_space = 0;
+    unsigned char last_map_key = 0;
+    unsigned char last_fire = 0;
     unsigned char running = 1;
 
     init_renderer();
     init_raycaster();
 
-    /* Clear keyboard buffer */
     while (kbhit()) {
         cgetc();
     }
@@ -133,64 +99,57 @@ int main(void) {
             render_frame();
         }
 
-        /* Read smooth continuous keyboard and joystick input */
-        scan_keyboard();
+        /* Read controls from Joystick Port 2 and keyboard */
+        read_controls();
 
-        if (key_x) {
+        if (key_exit) {
             running = 0;
             break;
         }
 
-        /* Toggle 3D tactical map */
-        if (key_m && !last_key_m) {
+        /* Toggle 3D Map mode */
+        if (key_map && !last_map_key) {
             map_mode = !map_mode;
         }
-        last_key_m = key_m;
+        last_map_key = key_map;
 
-        /* Move Forward (W) */
-        if (key_w) {
+        /* If Fire button is held while turning: Strafe! */
+        if (joy_fire && joy_left) {
+            unsigned char strafe_ang = (unsigned char)(player_angle - 64);
+            fixed dx = (fixed)(((signed long)COS_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
+            fixed dy = (fixed)(((signed long)SIN_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
+            try_move(dx, dy);
+        } else if (joy_fire && joy_right) {
+            unsigned char strafe_ang = (unsigned char)(player_angle + 64);
+            fixed dx = (fixed)(((signed long)COS_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
+            fixed dy = (fixed)(((signed long)SIN_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
+            try_move(dx, dy);
+        } else {
+            /* Normal rotation */
+            if (joy_left) {
+                player_angle = (unsigned char)(player_angle - TURN_SPEED);
+            }
+            if (joy_right) {
+                player_angle = (unsigned char)(player_angle + TURN_SPEED);
+            }
+        }
+
+        /* Forward / Backward movement */
+        if (joy_up) {
             fixed dx = (fixed)(((signed long)COS_LOOKUP(player_angle) * MOVE_SPEED) >> FP_SHIFT);
             fixed dy = (fixed)(((signed long)SIN_LOOKUP(player_angle) * MOVE_SPEED) >> FP_SHIFT);
             try_move(dx, dy);
             play_step_sound();
         }
-
-        /* Move Backward (S) */
-        if (key_s) {
+        if (joy_down) {
             fixed dx = (fixed)(((signed long)COS_LOOKUP(player_angle) * MOVE_SPEED) >> FP_SHIFT);
             fixed dy = (fixed)(((signed long)SIN_LOOKUP(player_angle) * MOVE_SPEED) >> FP_SHIFT);
             try_move(-dx, -dy);
             play_step_sound();
         }
 
-        /* Turn Left (A) */
-        if (key_a) {
-            player_angle = (unsigned char)(player_angle - TURN_SPEED);
-        }
-
-        /* Turn Right (D) */
-        if (key_d) {
-            player_angle = (unsigned char)(player_angle + TURN_SPEED);
-        }
-
-        /* Strafe Left (Q) */
-        if (key_q) {
-            unsigned char strafe_ang = (unsigned char)(player_angle - 64);
-            fixed dx = (fixed)(((signed long)COS_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
-            fixed dy = (fixed)(((signed long)SIN_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
-            try_move(dx, dy);
-        }
-
-        /* Strafe Right (E) */
-        if (key_e) {
-            unsigned char strafe_ang = (unsigned char)(player_angle + 64);
-            fixed dx = (fixed)(((signed long)COS_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
-            fixed dy = (fixed)(((signed long)SIN_LOOKUP(strafe_ang) * MOVE_SPEED) >> FP_SHIFT);
-            try_move(dx, dy);
-        }
-
-        /* Open Door (Space) */
-        if (key_space && !last_key_space) {
+        /* Fire button (tap): Open door in front of player */
+        if (joy_fire && !last_fire && !joy_left && !joy_right) {
             unsigned char front_ang = player_angle;
             fixed fx = player_x + (fixed)(((signed long)COS_LOOKUP(front_ang) * 300) >> FP_SHIFT);
             fixed fy = player_y + (fixed)(((signed long)SIN_LOOKUP(front_ang) * 300) >> FP_SHIFT);
@@ -204,7 +163,7 @@ int main(void) {
                 }
             }
         }
-        last_key_space = key_space;
+        last_fire = joy_fire;
     }
 
     return 0;

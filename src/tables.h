@@ -15,24 +15,22 @@ extern const unsigned int delta_x_table[256];
 #define DELTA_X_LOOKUP(a) (delta_x_table[(unsigned char)(a)])
 #define DELTA_Y_LOOKUP(a) (delta_x_table[((unsigned char)((a) - 64))])
 
-/* Ray angle offsets and fish-eye cosine for NUM_RAYS (20 rays) */
+/* Ray angle offsets and fish-eye cosine for 40 rays across 160 pixels */
 extern const signed char ray_angle_offset[NUM_RAYS];
 extern const unsigned char cos_ray_table[NUM_RAYS];
 
-/* Projected wall height lookup (0..25 rows) */
+/* Projected wall height lookup (0..200 scanlines) */
 extern const unsigned char height_table[256];
 
-/* Vertical texture step lookup: (8 << 8) / wall_h */
-extern const unsigned int v_step_table[26];
+/* Vertical texture step lookup: (16 << 8) / wall_h */
+extern const unsigned int v_step_table[201];
 
-/* Precomputed Wolfenstein 3D Wall Textures: 5 types x 8 rows x 4 cols */
-extern const unsigned char tex_chars[5][8][4];
-extern const unsigned char tex_colors[5][8][4];
+/* 160x200 Multicolor Bitmap Textures: 5 types x 16 scanlines */
+extern const unsigned char bmp_textures[5][16];
 
-/* Directional lighting: shaded darker color for Y-side walls */
-extern const unsigned char dark_colors[16];
-
-/* Distance fog color table */
-extern const unsigned char fog_colors[16];
+/* Color palette per tile */
+extern const unsigned char tile_color_screen[5];
+extern const unsigned char tile_color_screen_dark[5];
+extern const unsigned char tile_color_ram[5];
 
 #endif /* TABLES_H */

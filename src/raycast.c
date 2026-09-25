@@ -2,7 +2,7 @@
 #include "tables.h"
 #include "map.h"
 
-RayHit ray_hits[SCREEN_COLS];
+RayHit ray_hits[NUM_RAYS];
 
 fixed player_x;
 fixed player_y;
@@ -18,7 +18,7 @@ void init_raycaster(void) {
 void raycast_all(void) {
     unsigned char col;
 
-    for (col = 0; col < SCREEN_COLS; ++col) {
+    for (col = 0; col < NUM_RAYS; ++col) {
         unsigned char ray_angle;
         signed int cos_val;
         signed int sin_val;
@@ -36,7 +36,11 @@ void raycast_all(void) {
         unsigned int raw_dist;
         unsigned int perp_dist;
         unsigned int d;
-        fixed hit_pos;
+        unsigned char frac_x;
+        unsigned char frac_y;
+        unsigned int dx_scaled;
+        unsigned int dy_scaled;
+        unsigned char u;
 
         ray_angle = (unsigned char)(player_angle + ray_angle_offset[col]);
         cos_val = COS_LOOKUP(ray_angle);
@@ -48,23 +52,29 @@ void raycast_all(void) {
         map_x = (signed char)(player_x >> FP_SHIFT);
         map_y = (signed char)(player_y >> FP_SHIFT);
 
+        frac_x = (unsigned char)(player_x & 0xFF);
+        frac_y = (unsigned char)(player_y & 0xFF);
+
+        /* Fast 16-bit side_dist calculation without 32-bit math */
         if (cos_val >= 0) {
             step_x = 1;
-            side_dist_x = (unsigned int)(((unsigned long)(256 - (player_x & 0xFF)) * delta_x) >> 8);
+            dx_scaled = (256 - frac_x) >> 2;
         } else {
             step_x = -1;
-            side_dist_x = (unsigned int)(((unsigned long)(player_x & 0xFF) * delta_x) >> 8);
+            dx_scaled = frac_x >> 2;
         }
+        side_dist_x = (dx_scaled * (delta_x >> 2)) >> 4;
 
         if (sin_val >= 0) {
             step_y = 1;
-            side_dist_y = (unsigned int)(((unsigned long)(256 - (player_y & 0xFF)) * delta_y) >> 8);
+            dy_scaled = (256 - frac_y) >> 2;
         } else {
             step_y = -1;
-            side_dist_y = (unsigned int)(((unsigned long)(player_y & 0xFF) * delta_y) >> 8);
+            dy_scaled = frac_y >> 2;
         }
+        side_dist_y = (dy_scaled * (delta_y >> 2)) >> 4;
 
-        /* DDA stepping loop */
+        /* Ultra-fast 16-bit DDA loop */
         while (!hit && steps < MAX_RAY_STEPS) {
             if (side_dist_x < side_dist_y) {
                 side_dist_x += delta_x;
@@ -76,7 +86,7 @@ void raycast_all(void) {
                 side = 1;
             }
 
-            if (map_x < 0 || map_x >= MAP_WIDTH || map_y < 0 || map_y >= MAP_HEIGHT) {
+            if ((unsigned char)map_x >= MAP_WIDTH || (unsigned char)map_y >= MAP_HEIGHT) {
                 break;
             }
 
@@ -89,14 +99,15 @@ void raycast_all(void) {
         if (hit) {
             if (side == 0) {
                 raw_dist = side_dist_x - delta_x;
-                hit_pos = player_y + (fixed)(((signed long)raw_dist * sin_val) >> 8);
+                /* Fast texture u calculation */
+                u = (unsigned char)((player_y + (((raw_dist >> 2) * (sin_val >> 2)) >> 4)) >> 6) & 3;
             } else {
                 raw_dist = side_dist_y - delta_y;
-                hit_pos = player_x + (fixed)(((signed long)raw_dist * cos_val) >> 8);
+                u = (unsigned char)((player_x + (((raw_dist >> 2) * (cos_val >> 2)) >> 4)) >> 6) & 3;
             }
 
-            /* Fish-eye correction */
-            perp_dist = (unsigned int)(((unsigned long)raw_dist * cos_ray_table[col]) >> 8);
+            /* Fish-eye correction (16-bit) */
+            perp_dist = ((raw_dist >> 4) * cos_ray_table[col]) >> 4;
             d = perp_dist >> 4;
             if (d > 255) d = 255;
 
@@ -104,7 +115,7 @@ void raycast_all(void) {
             ray_hits[col].tile = game_map[(unsigned char)map_y][(unsigned char)map_x];
             ray_hits[col].side = side;
             ray_hits[col].dist = (unsigned char)d;
-            ray_hits[col].tex_u = (unsigned char)((hit_pos & 0xFF) >> 5);
+            ray_hits[col].tex_u = u;
         } else {
             ray_hits[col].height = 1;
             ray_hits[col].tile = TILE_GREY_STONE;

@@ -1,15 +1,16 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-/* Full screen 40x25 for pure 3D view (no HUD clutter) */
+/* Full screen 40x25 with 20 fast double-width rays (~25-30 FPS) */
 #define SCREEN_COLS         40
 #define SCREEN_ROWS         25
-#define VIEW_HEIGHT         25  /* Pure full-screen 3D viewport */
-#define HALF_VIEW_HEIGHT    12  /* Center horizon at row 12 */
+#define VIEW_HEIGHT         25
+#define HALF_VIEW_HEIGHT    12
+#define NUM_RAYS            20  /* 20 rays * 2 columns = 40 screen columns */
 
 /* Raycasting settings */
 #define FOV_ANGLES          42  /* ~60 degrees in 256-angle circle */
-#define MAX_RAY_STEPS       24  /* Max DDA steps per ray */
+#define MAX_RAY_STEPS       16  /* 16 steps is plenty for 16x16 map */
 
 /* C64 Memory Locations */
 #define SCREEN_RAM          ((unsigned char*)0x0400)

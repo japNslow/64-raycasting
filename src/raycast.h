@@ -9,10 +9,10 @@ typedef struct {
     unsigned char tile;      /* Map tile type (1..5) */
     unsigned char side;      /* 0 = X side, 1 = Y side */
     unsigned char dist;      /* Perpendicular distance */
-    unsigned char tex_u;     /* Horizontal texture coordinate 0..7 */
+    unsigned char tex_u;     /* Horizontal texture coordinate 0..3 */
 } RayHit;
 
-extern RayHit ray_hits[SCREEN_COLS];
+extern RayHit ray_hits[NUM_RAYS];
 
 /* Player state */
 extern fixed player_x;

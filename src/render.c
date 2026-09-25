@@ -36,166 +36,109 @@ void init_renderer(void) {
 }
 
 void render_frame(void) {
-    unsigned char x;
+    unsigned char r;
 
-    for (x = 0; x < SCREEN_COLS; ++x) {
-        unsigned char h = ray_hits[x].height;
-        unsigned char tile = ray_hits[x].tile;
-        unsigned char side = ray_hits[x].side;
-        unsigned char dist = ray_hits[x].dist;
-        unsigned char u = ray_hits[x].tex_u;
+    for (r = 0; r < NUM_RAYS; ++r) {
+        unsigned char col_x = (unsigned char)(r << 1);
+        unsigned char h = ray_hits[r].height;
+        unsigned char tile_raw = ray_hits[r].tile;
+        unsigned char tile_idx = (tile_raw > 0 && tile_raw <= 5) ? (tile_raw - 1) : 0;
+        unsigned char side = ray_hits[r].side;
+        unsigned char dist = ray_hits[r].dist;
+        unsigned char u0 = ray_hits[r].tex_u;
+        unsigned char u1 = (unsigned char)((u0 + 1) & 3);
         unsigned char half_h = h >> 1;
         signed char top = HALF_VIEW_HEIGHT - half_h;
         signed char bot = HALF_VIEW_HEIGHT + half_h + (h & 1);
         unsigned char wall_h;
+        unsigned int v_step;
+        unsigned int v_acc;
+        unsigned char is_fog;
+        unsigned char* scr;
+        unsigned char* col;
         signed char y;
 
         if (top < 0) top = 0;
         if (bot > VIEW_HEIGHT) bot = VIEW_HEIGHT;
         wall_h = (unsigned char)(bot - top);
 
-        /* 1. Ceiling (Rows 0 to top-1) with distance stippling */
+        /* Pointer to top of column pair (col_x and col_x + 1) */
+        scr = SCREEN_RAM + col_x;
+        col = COLOR_RAM + col_x;
+
+        /* 1. Fast Ceiling (Rows 0 to top-1) */
         for (y = 0; y < top; ++y) {
-            if (y > 7 && ((x + y) & 1)) {
-                screen_rows[y][x] = TEX_DOT;
-                color_rows[y][x] = C64_DARKGRAY;
-            } else {
-                screen_rows[y][x] = TEX_SPACE;
-                color_rows[y][x] = C64_BLACK;
-            }
+            scr[0] = TEX_SPACE;
+            scr[1] = TEX_SPACE;
+            col[0] = C64_BLACK;
+            col[1] = C64_BLACK;
+            scr += 40;
+            col += 40;
         }
 
-        /* 2. Wall with Textures (Rows top to bot-1) */
+        /* 2. Fast Textured Wall (Rows top to bot-1) */
         if (wall_h > 0) {
-            for (y = top; y < bot; ++y) {
-                unsigned char v = (unsigned char)(((unsigned int)(y - top) << 3) / wall_h);
-                unsigned char ch;
-                unsigned char col;
+            v_step = v_step_table[wall_h];
+            v_acc = 0;
+            is_fog = (dist > 85);
 
+            for (y = top; y < bot; ++y) {
+                unsigned char v = (unsigned char)(v_acc >> 8);
+                unsigned char ch0, ch1;
+                unsigned char c0, c1;
+
+                v_acc += v_step;
                 if (v > 7) v = 7;
 
-                switch (tile) {
-                    case TILE_RED_BRICK:
-                        /* Brick pattern: staggered mortar joints */
-                        if (v == 0 || v == 4) {
-                            /* Horizontal mortar line */
-                            ch = TEX_HLINE;
-                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
-                        } else if ((v < 4 && u == 0) || (v >= 4 && u == 4)) {
-                            /* Vertical staggered mortar */
-                            ch = TEX_VLINE;
-                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
-                        } else {
-                            /* Brick face */
-                            ch = TEX_SOLID;
-                            col = (side == 0) ? C64_LIGHTRED : C64_RED;
-                        }
-                        break;
+                ch0 = tex_chars[tile_idx][v][u0];
+                ch1 = tex_chars[tile_idx][v][u1];
 
-                    case TILE_GREY_STONE:
-                        /* Stone blocks with 3D beveled edges */
-                        if (v == 0 || u == 0) {
-                            /* Highlight edge */
-                            ch = (v == 0) ? TEX_HLINE : TEX_VLINE;
-                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
-                        } else if (v == 7 || u == 7) {
-                            /* Shadow edge */
-                            ch = (v == 7) ? TEX_HLINE : TEX_VLINE;
-                            col = C64_DARKGRAY;
-                        } else {
-                            /* Stone interior */
-                            ch = (dist > 60) ? TEX_DITHER1 : TEX_SOLID;
-                            col = (side == 0) ? C64_LIGHTGRAY : C64_GRAY;
-                        }
-                        break;
+                c0 = tex_colors[tile_idx][v][u0];
+                c1 = tex_colors[tile_idx][v][u1];
 
-                    case TILE_BLUE_STONE:
-                        /* Wolfenstein blue stone with golden emblem */
-                        if (v == 0 || v == 7 || u == 0 || u == 7) {
-                            /* Frame border */
-                            ch = (v == 0 || v == 7) ? TEX_HLINE : TEX_VLINE;
-                            col = (side == 0) ? C64_BLUE : C64_BLACK;
-                        } else if ((u == 3 || u == 4) && (v == 3 || v == 4)) {
-                            /* Golden cross/emblem */
-                            ch = TEX_CROSS;
-                            col = C64_YELLOW;
-                        } else {
-                            /* Blue stone face */
-                            ch = (dist > 60) ? TEX_DITHER1 : TEX_SOLID;
-                            col = (side == 0) ? C64_LIGHTBLUE : C64_BLUE;
-                        }
-                        break;
-
-                    case TILE_WOOD:
-                        /* Vertical wooden planks */
-                        if (u == 0 || u == 4) {
-                            ch = TEX_VLINE;
-                            col = C64_BROWN;
-                        } else if (v == 0 || v == 7) {
-                            ch = TEX_HLINE;
-                            col = C64_BROWN;
-                        } else {
-                            ch = TEX_SOLID;
-                            col = (side == 0) ? C64_ORANGE : C64_BROWN;
-                        }
-                        break;
-
-                    case TILE_DOOR:
-                        /* Metal door with frame, panels, and gold handle */
-                        if (u == 0 || u == 7) {
-                            ch = TEX_VLINE;
-                            col = C64_LIGHTGRAY;
-                        } else if (v == 0) {
-                            ch = TEX_HLINE;
-                            col = C64_LIGHTGRAY;
-                        } else if (u == 5 && v == 4) {
-                            /* Brass doorknob */
-                            ch = TEX_KNOB;
-                            col = C64_YELLOW;
-                        } else if ((v == 2 || v == 6) && (u >= 2 && u <= 5)) {
-                            ch = TEX_HLINE;
-                            col = C64_GRAY;
-                        } else {
-                            ch = TEX_SOLID;
-                            col = (side == 0) ? C64_GRAY : C64_DARKGRAY;
-                        }
-                        break;
-
-                    default:
-                        ch = TEX_SOLID;
-                        col = C64_GRAY;
-                        break;
+                /* Directional wall shading: darken Y-side walls for 3D depth */
+                if (side) {
+                    c0 = dark_colors[c0];
+                    c1 = dark_colors[c1];
                 }
 
-                /* Distance fogging for distant walls */
-                if (dist > 85) {
-                    ch = TEX_DITHER1;
-                    col = (side == 0) ? C64_DARKGRAY : C64_BLACK;
+                /* Atmospheric distance fog */
+                if (is_fog) {
+                    ch0 = TEX_DITHER1;
+                    ch1 = TEX_DITHER1;
+                    c0 = fog_colors[c0];
+                    c1 = fog_colors[c1];
                 }
 
-                screen_rows[y][x] = ch;
-                color_rows[y][x] = col;
+                scr[0] = ch0;
+                scr[1] = ch1;
+                col[0] = c0;
+                col[1] = c1;
+                scr += 40;
+                col += 40;
             }
         }
 
-        /* 3. Floor (Rows bot to VIEW_HEIGHT-1) with perspective lines */
+        /* 3. Fast Perspective Floor (Rows bot to VIEW_HEIGHT-1) */
         for (y = bot; y < VIEW_HEIGHT; ++y) {
             if (y > 21) {
-                /* Close foreground floor tiles */
-                if ((x & 3) == 0) {
-                    screen_rows[y][x] = TEX_VLINE;
-                    color_rows[y][x] = C64_GRAY;
-                } else {
-                    screen_rows[y][x] = TEX_FLOOR_LINE;
-                    color_rows[y][x] = C64_BROWN;
-                }
+                scr[0] = TEX_FLOOR_LINE;
+                scr[1] = TEX_FLOOR_LINE;
+                col[0] = C64_BROWN;
+                col[1] = C64_BROWN;
             } else if (y > 17) {
-                screen_rows[y][x] = TEX_FLOOR_LINE;
-                color_rows[y][x] = C64_DARKGRAY;
+                scr[0] = TEX_FLOOR_LINE;
+                scr[1] = TEX_FLOOR_LINE;
+                col[0] = C64_DARKGRAY;
+                col[1] = C64_DARKGRAY;
             } else {
-                screen_rows[y][x] = TEX_DOT;
-                color_rows[y][x] = C64_BLACK;
+                scr[0] = TEX_DOT;
+                scr[1] = TEX_DOT;
+                col[0] = C64_BLACK;
+                col[1] = C64_BLACK;
             }
+            scr += 40;
+            col += 40;
         }
     }
 }
@@ -240,7 +183,7 @@ void render_fullscreen_map(void) {
                     default:              color_rows[sy][sx] = C64_LIGHTGRAY; break;
                 }
             } else {
-                /* Empty floor tile with subtle dot */
+                /* Empty floor tile */
                 screen_rows[sy][sx] = TEX_DOT;
                 color_rows[sy][sx] = C64_DARKGRAY;
             }

@@ -1,16 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-/* Screen dimensions for C64 */
+/* Full screen 40x25 for pure 3D view (no HUD clutter) */
 #define SCREEN_COLS         40
 #define SCREEN_ROWS         25
-#define VIEW_HEIGHT         19  /* Rows 0..18 for 3D view */
-#define HUD_START_ROW       19  /* Rows 19..24 for HUD */
-#define HUD_ROWS            6
+#define VIEW_HEIGHT         25  /* Pure full-screen 3D viewport */
+#define HALF_VIEW_HEIGHT    12  /* Center horizon at row 12 */
 
 /* Raycasting settings */
 #define FOV_ANGLES          42  /* ~60 degrees in 256-angle circle */
-#define HALF_VIEW_HEIGHT    9   /* Center horizon (row 9) */
 #define MAX_RAY_STEPS       24  /* Max DDA steps per ray */
 
 /* C64 Memory Locations */
@@ -19,6 +17,10 @@
 #define VIC_BORDER          (*(volatile unsigned char*)0xD020)
 #define VIC_BG              (*(volatile unsigned char*)0xD021)
 #define JOYSTICK_PORT2      (*(volatile unsigned char*)0xDC00)
+
+/* CIA1 Keyboard Matrix Registers */
+#define CIA1_PRA            (*(volatile unsigned char*)0xDC00)
+#define CIA1_PRB            (*(volatile unsigned char*)0xDC01)
 
 /* C64 VIC-II Color codes */
 #define C64_BLACK           0
@@ -38,13 +40,17 @@
 #define C64_LIGHTBLUE       14
 #define C64_LIGHTGRAY       15
 
-/* PETSCII Screen codes */
-#define CH_SPACE            0x20
-#define CH_SOLID            0xA0
-#define CH_DITHER1          0x66
-#define CH_DITHER2          0x67
-#define PETSCII_HLINE       0x40
-#define PETSCII_VLINE       0x5D
-#define CH_DOT              0x2E
+/* PETSCII Screen codes for 3D textures */
+#define TEX_SPACE           0x20
+#define TEX_SOLID           0xA0
+#define TEX_DITHER1         0x66
+#define TEX_DITHER2         0x67
+#define TEX_HLINE           0x40
+#define TEX_VLINE           0x5D
+#define TEX_DOT             0x2E
+#define TEX_KNOB            0x51
+#define TEX_CROSS           0x5A
+#define TEX_FLOOR_LINE      0x64
+#define TEX_FLOOR_TILE      0x63
 
 #endif /* CONFIG_H */

@@ -36,6 +36,7 @@ void raycast_all(void) {
         unsigned int raw_dist;
         unsigned int perp_dist;
         unsigned int d;
+        fixed hit_pos;
 
         ray_angle = (unsigned char)(player_angle + ray_angle_offset[col]);
         cos_val = COS_LOOKUP(ray_angle);
@@ -88,8 +89,10 @@ void raycast_all(void) {
         if (hit) {
             if (side == 0) {
                 raw_dist = side_dist_x - delta_x;
+                hit_pos = player_y + (fixed)(((signed long)raw_dist * sin_val) >> 8);
             } else {
                 raw_dist = side_dist_y - delta_y;
+                hit_pos = player_x + (fixed)(((signed long)raw_dist * cos_val) >> 8);
             }
 
             /* Fish-eye correction */
@@ -101,11 +104,13 @@ void raycast_all(void) {
             ray_hits[col].tile = game_map[(unsigned char)map_y][(unsigned char)map_x];
             ray_hits[col].side = side;
             ray_hits[col].dist = (unsigned char)d;
+            ray_hits[col].tex_u = (unsigned char)((hit_pos & 0xFF) >> 5);
         } else {
             ray_hits[col].height = 1;
             ray_hits[col].tile = TILE_GREY_STONE;
             ray_hits[col].side = 0;
             ray_hits[col].dist = 255;
+            ray_hits[col].tex_u = 0;
         }
     }
 }

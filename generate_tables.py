@@ -4,7 +4,7 @@ with open('src/tables.c', 'w', encoding='utf-8') as f:
     f.write('/* Generated trigonometric and projection lookup tables */\n')
     f.write('#include "tables.h"\n\n')
 
-    # Sin table
+    # Sin table (256 angles)
     f.write('const signed int sin_table[256] = {\n')
     for i in range(256):
         angle = 2.0 * math.pi * i / 256.0
@@ -34,7 +34,7 @@ with open('src/tables.c', 'w', encoding='utf-8') as f:
             f.write('\n')
     f.write('};\n\n')
 
-    # Ray angle offset table
+    # Ray angle offset table (40 columns)
     f.write('const signed char ray_angle_offset[40] = {\n')
     fov_deg = 60.0
     ray_offsets = []
@@ -67,15 +67,15 @@ with open('src/tables.c', 'w', encoding='utf-8') as f:
         f.write('\n')
     f.write('};\n\n')
 
-    # Height table
+    # Height table (scaled for full 25-row screen)
     f.write('const unsigned char height_table[256] = {\n')
     for dist in range(256):
         if dist < 6:
-            h = 19
+            h = 25
         else:
-            h = int(round(360.0 / float(dist)))
-            if h > 19:
-                h = 19
+            h = int(round(480.0 / float(dist)))
+            if h > 25:
+                h = 25
             if h < 1:
                 h = 1
         if dist % 8 == 0:
@@ -85,4 +85,4 @@ with open('src/tables.c', 'w', encoding='utf-8') as f:
             f.write('\n')
     f.write('};\n')
 
-print('Generated src/tables.c successfully')
+print('Generated src/tables.c successfully for 25 rows')

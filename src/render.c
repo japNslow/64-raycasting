@@ -43,149 +43,158 @@ void render_frame(void) {
         unsigned char tile = ray_hits[x].tile;
         unsigned char side = ray_hits[x].side;
         unsigned char dist = ray_hits[x].dist;
+        unsigned char u = ray_hits[x].tex_u;
         unsigned char half_h = h >> 1;
         signed char top = HALF_VIEW_HEIGHT - half_h;
         signed char bot = HALF_VIEW_HEIGHT + half_h + (h & 1);
-        unsigned char col;
-        unsigned char ch;
+        unsigned char wall_h;
         signed char y;
 
         if (top < 0) top = 0;
         if (bot > VIEW_HEIGHT) bot = VIEW_HEIGHT;
+        wall_h = (unsigned char)(bot - top);
 
-        /* Wall color & shading */
-        switch (tile) {
-            case TILE_BLUE_STONE:
-                col = (side == 0) ? C64_LIGHTBLUE : C64_BLUE;
-                break;
-            case TILE_WOOD:
-                col = (side == 0) ? C64_ORANGE : C64_BROWN;
-                break;
-            case TILE_RED_BRICK:
-                col = (side == 0) ? C64_LIGHTRED : C64_RED;
-                break;
-            case TILE_DOOR:
-                col = (side == 0) ? C64_YELLOW : C64_ORANGE;
-                break;
-            case TILE_GREY_STONE:
-            default:
-                col = (side == 0) ? C64_LIGHTGRAY : C64_DARKGRAY;
-                break;
-        }
-
-        /* Distance dithering for distant walls */
-        if (dist > 75) {
-            ch = CH_DITHER1;
-        } else {
-            ch = CH_SOLID;
-        }
-
-        /* 1. Ceiling */
+        /* 1. Ceiling (Rows 0 to top-1) with distance stippling */
         for (y = 0; y < top; ++y) {
-            screen_rows[y][x] = CH_SPACE;
-            color_rows[y][x] = C64_BLACK;
-        }
-
-        /* 2. Wall */
-        for (y = top; y < bot; ++y) {
-            screen_rows[y][x] = ch;
-            color_rows[y][x] = col;
-        }
-
-        /* 3. Floor */
-        for (y = bot; y < VIEW_HEIGHT; ++y) {
-            screen_rows[y][x] = CH_DOT;
-            color_rows[y][x] = C64_DARKGRAY;
-        }
-    }
-}
-
-void render_hud(unsigned int score, unsigned char health, unsigned char fps) {
-    char buf[40];
-    unsigned char x;
-    signed char rx, ry;
-    signed char px = (signed char)(player_x >> FP_SHIFT);
-    signed char py = (signed char)(player_y >> FP_SHIFT);
-
-    /* Separator line on row 19 */
-    for (x = 0; x < SCREEN_COLS; ++x) {
-        screen_rows[19][x] = 0x40; /* Horizontal line */
-        color_rows[19][x] = C64_LIGHTGRAY;
-    }
-
-    /* Row 20: Floor & Score */
-    print_at(1, 20, "FLOOR: 1", C64_YELLOW);
-    print_at(12, 20, "SCORE:", C64_CYAN);
-    buf[0] = '0' + ((score / 1000) % 10);
-    buf[1] = '0' + ((score / 100) % 10);
-    buf[2] = '0' + ((score / 10) % 10);
-    buf[3] = '0' + (score % 10);
-    buf[4] = '\0';
-    print_at(19, 20, buf, C64_WHITE);
-
-    /* Row 21: Health & Keys */
-    print_at(1, 21, "HEALTH:", C64_LIGHTRED);
-    buf[0] = '0' + ((health / 100) % 10);
-    buf[1] = '0' + ((health / 10) % 10);
-    buf[2] = '0' + (health % 10);
-    buf[3] = '%';
-    buf[4] = '\0';
-    print_at(9, 21, buf, C64_GREEN);
-    print_at(16, 21, "KEY:[GOLD]", C64_YELLOW);
-
-    /* Row 22: Position & Angle */
-    print_at(1, 22, "POS:", C64_LIGHTBLUE);
-    buf[0] = '0' + ((px / 10) % 10);
-    buf[1] = '0' + (px % 10);
-    buf[2] = ',';
-    buf[3] = '0' + ((py / 10) % 10);
-    buf[4] = '0' + (py % 10);
-    buf[5] = '\0';
-    print_at(6, 22, buf, C64_WHITE);
-
-    print_at(13, 22, "ANG:", C64_LIGHTBLUE);
-    buf[0] = '0' + ((player_angle / 100) % 10);
-    buf[1] = '0' + ((player_angle / 10) % 10);
-    buf[2] = '0' + (player_angle % 10);
-    buf[3] = '\0';
-    print_at(18, 22, buf, C64_WHITE);
-
-    /* Row 23: FPS & Controls hint */
-    print_at(1, 23, "FPS:", C64_ORANGE);
-    buf[0] = '0' + ((fps / 10) % 10);
-    buf[1] = '0' + (fps % 10);
-    buf[2] = '\0';
-    print_at(6, 23, buf, C64_WHITE);
-    print_at(10, 23, "[W/A/S/D] MOVE", C64_GRAY);
-
-    /* Row 24: Extra controls */
-    print_at(1, 24, "[M] MAP  [Q/E] STRAFE", C64_DARKGRAY);
-
-    /* Mini-Radar in rows 20..24, cols 31..38 */
-    print_at(31, 19, "+RADAR+", C64_YELLOW);
-    for (ry = -2; ry <= 2; ++ry) {
-        unsigned char hud_y = (unsigned char)(22 + ry);
-        for (rx = -3; rx <= 4; ++rx) {
-            unsigned char hud_x = (unsigned char)(34 + rx);
-            signed char mx = px + rx;
-            signed char my = py + ry;
-
-            if (rx == 0 && ry == 0) {
-                /* Player position marker */
-                screen_rows[hud_y][hud_x] = 0x51; /* Ball/Circle */
-                color_rows[hud_y][hud_x] = C64_WHITE;
-            } else if (mx >= 0 && mx < MAP_WIDTH && my >= 0 && my < MAP_HEIGHT) {
-                unsigned char t = game_map[(unsigned char)my][(unsigned char)mx];
-                if (t != TILE_EMPTY) {
-                    screen_rows[hud_y][hud_x] = CH_SOLID;
-                    color_rows[hud_y][hud_x] = (t == TILE_DOOR) ? C64_YELLOW : C64_LIGHTBLUE;
-                } else {
-                    screen_rows[hud_y][hud_x] = CH_DOT;
-                    color_rows[hud_y][hud_x] = C64_DARKGRAY;
-                }
+            if (y > 7 && ((x + y) & 1)) {
+                screen_rows[y][x] = TEX_DOT;
+                color_rows[y][x] = C64_DARKGRAY;
             } else {
-                screen_rows[hud_y][hud_x] = CH_SPACE;
-                color_rows[hud_y][hud_x] = C64_BLACK;
+                screen_rows[y][x] = TEX_SPACE;
+                color_rows[y][x] = C64_BLACK;
+            }
+        }
+
+        /* 2. Wall with Textures (Rows top to bot-1) */
+        if (wall_h > 0) {
+            for (y = top; y < bot; ++y) {
+                unsigned char v = (unsigned char)(((unsigned int)(y - top) << 3) / wall_h);
+                unsigned char ch;
+                unsigned char col;
+
+                if (v > 7) v = 7;
+
+                switch (tile) {
+                    case TILE_RED_BRICK:
+                        /* Brick pattern: staggered mortar joints */
+                        if (v == 0 || v == 4) {
+                            /* Horizontal mortar line */
+                            ch = TEX_HLINE;
+                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
+                        } else if ((v < 4 && u == 0) || (v >= 4 && u == 4)) {
+                            /* Vertical staggered mortar */
+                            ch = TEX_VLINE;
+                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
+                        } else {
+                            /* Brick face */
+                            ch = TEX_SOLID;
+                            col = (side == 0) ? C64_LIGHTRED : C64_RED;
+                        }
+                        break;
+
+                    case TILE_GREY_STONE:
+                        /* Stone blocks with 3D beveled edges */
+                        if (v == 0 || u == 0) {
+                            /* Highlight edge */
+                            ch = (v == 0) ? TEX_HLINE : TEX_VLINE;
+                            col = (side == 0) ? C64_WHITE : C64_LIGHTGRAY;
+                        } else if (v == 7 || u == 7) {
+                            /* Shadow edge */
+                            ch = (v == 7) ? TEX_HLINE : TEX_VLINE;
+                            col = C64_DARKGRAY;
+                        } else {
+                            /* Stone interior */
+                            ch = (dist > 60) ? TEX_DITHER1 : TEX_SOLID;
+                            col = (side == 0) ? C64_LIGHTGRAY : C64_GRAY;
+                        }
+                        break;
+
+                    case TILE_BLUE_STONE:
+                        /* Wolfenstein blue stone with golden emblem */
+                        if (v == 0 || v == 7 || u == 0 || u == 7) {
+                            /* Frame border */
+                            ch = (v == 0 || v == 7) ? TEX_HLINE : TEX_VLINE;
+                            col = (side == 0) ? C64_BLUE : C64_BLACK;
+                        } else if ((u == 3 || u == 4) && (v == 3 || v == 4)) {
+                            /* Golden cross/emblem */
+                            ch = TEX_CROSS;
+                            col = C64_YELLOW;
+                        } else {
+                            /* Blue stone face */
+                            ch = (dist > 60) ? TEX_DITHER1 : TEX_SOLID;
+                            col = (side == 0) ? C64_LIGHTBLUE : C64_BLUE;
+                        }
+                        break;
+
+                    case TILE_WOOD:
+                        /* Vertical wooden planks */
+                        if (u == 0 || u == 4) {
+                            ch = TEX_VLINE;
+                            col = C64_BROWN;
+                        } else if (v == 0 || v == 7) {
+                            ch = TEX_HLINE;
+                            col = C64_BROWN;
+                        } else {
+                            ch = TEX_SOLID;
+                            col = (side == 0) ? C64_ORANGE : C64_BROWN;
+                        }
+                        break;
+
+                    case TILE_DOOR:
+                        /* Metal door with frame, panels, and gold handle */
+                        if (u == 0 || u == 7) {
+                            ch = TEX_VLINE;
+                            col = C64_LIGHTGRAY;
+                        } else if (v == 0) {
+                            ch = TEX_HLINE;
+                            col = C64_LIGHTGRAY;
+                        } else if (u == 5 && v == 4) {
+                            /* Brass doorknob */
+                            ch = TEX_KNOB;
+                            col = C64_YELLOW;
+                        } else if ((v == 2 || v == 6) && (u >= 2 && u <= 5)) {
+                            ch = TEX_HLINE;
+                            col = C64_GRAY;
+                        } else {
+                            ch = TEX_SOLID;
+                            col = (side == 0) ? C64_GRAY : C64_DARKGRAY;
+                        }
+                        break;
+
+                    default:
+                        ch = TEX_SOLID;
+                        col = C64_GRAY;
+                        break;
+                }
+
+                /* Distance fogging for distant walls */
+                if (dist > 85) {
+                    ch = TEX_DITHER1;
+                    col = (side == 0) ? C64_DARKGRAY : C64_BLACK;
+                }
+
+                screen_rows[y][x] = ch;
+                color_rows[y][x] = col;
+            }
+        }
+
+        /* 3. Floor (Rows bot to VIEW_HEIGHT-1) with perspective lines */
+        for (y = bot; y < VIEW_HEIGHT; ++y) {
+            if (y > 21) {
+                /* Close foreground floor tiles */
+                if ((x & 3) == 0) {
+                    screen_rows[y][x] = TEX_VLINE;
+                    color_rows[y][x] = C64_GRAY;
+                } else {
+                    screen_rows[y][x] = TEX_FLOOR_LINE;
+                    color_rows[y][x] = C64_BROWN;
+                }
+            } else if (y > 17) {
+                screen_rows[y][x] = TEX_FLOOR_LINE;
+                color_rows[y][x] = C64_DARKGRAY;
+            } else {
+                screen_rows[y][x] = TEX_DOT;
+                color_rows[y][x] = C64_BLACK;
             }
         }
     }
@@ -196,18 +205,18 @@ void render_fullscreen_map(void) {
     signed char px = (signed char)(player_x >> FP_SHIFT);
     signed char py = (signed char)(player_y >> FP_SHIFT);
 
-    /* Clear screen */
+    /* Clear screen to black */
     for (y = 0; y < SCREEN_ROWS; ++y) {
         for (x = 0; x < SCREEN_COLS; ++x) {
-            screen_rows[y][x] = CH_SPACE;
+            screen_rows[y][x] = TEX_SPACE;
             color_rows[y][x] = C64_BLACK;
         }
     }
 
-    print_at(10, 1, "=== TACTICAL MAP ===", C64_YELLOW);
-    print_at(6, 2, "PLAYER: (O)  WALL: (#)  DOOR: (=)", C64_CYAN);
+    print_at(9, 1, "=== 3D TACTICAL MAP ===", C64_YELLOW);
+    print_at(5, 2, "PLAYER: (O)  WALL: [3D]  DOOR: (=)", C64_CYAN);
 
-    /* Draw 16x16 map centered: cols 12..27, rows 4..19 */
+    /* Render 16x16 map with 3D block relief */
     for (y = 0; y < MAP_HEIGHT; ++y) {
         for (x = 0; x < MAP_WIDTH; ++x) {
             unsigned char sx = 12 + x;
@@ -215,22 +224,43 @@ void render_fullscreen_map(void) {
             unsigned char t = game_map[y][x];
 
             if ((signed char)x == px && (signed char)y == py) {
-                screen_rows[sy][sx] = 0x51; /* Player marker */
+                /* Player position marker */
+                screen_rows[sy][sx] = TEX_KNOB;
                 color_rows[sy][sx] = C64_WHITE;
             } else if (t == TILE_DOOR) {
                 screen_rows[sy][sx] = '=';
                 color_rows[sy][sx] = C64_YELLOW;
             } else if (t != TILE_EMPTY) {
-                screen_rows[sy][sx] = CH_SOLID;
-                color_rows[sy][sx] = (t == TILE_BLUE_STONE) ? C64_LIGHTBLUE :
-                                     (t == TILE_RED_BRICK)  ? C64_LIGHTRED :
-                                     (t == TILE_WOOD)       ? C64_ORANGE : C64_LIGHTGRAY;
+                /* 3D block top face */
+                screen_rows[sy][sx] = TEX_SOLID;
+                switch (t) {
+                    case TILE_BLUE_STONE: color_rows[sy][sx] = C64_LIGHTBLUE; break;
+                    case TILE_RED_BRICK:  color_rows[sy][sx] = C64_LIGHTRED; break;
+                    case TILE_WOOD:       color_rows[sy][sx] = C64_ORANGE; break;
+                    default:              color_rows[sy][sx] = C64_LIGHTGRAY; break;
+                }
             } else {
-                screen_rows[sy][sx] = CH_DOT;
+                /* Empty floor tile with subtle dot */
+                screen_rows[sy][sx] = TEX_DOT;
                 color_rows[sy][sx] = C64_DARKGRAY;
             }
         }
     }
 
-    print_at(9, 22, "PRESS [M] TO RETURN", C64_GREEN);
+    /* Draw player view direction ray on map */
+    {
+        signed char dir_dx = (signed char)(COS_LOOKUP(player_angle) >> 6);
+        signed char dir_dy = (signed char)(SIN_LOOKUP(player_angle) >> 6);
+        signed char fx = px + (dir_dx > 0 ? 1 : (dir_dx < 0 ? -1 : 0));
+        signed char fy = py + (dir_dy > 0 ? 1 : (dir_dy < 0 ? -1 : 0));
+        if (fx >= 0 && fx < MAP_WIDTH && fy >= 0 && fy < MAP_HEIGHT) {
+            if (game_map[(unsigned char)fy][(unsigned char)fx] == TILE_EMPTY) {
+                screen_rows[4 + fy][12 + fx] = TEX_CROSS;
+                color_rows[4 + fy][12 + fx] = C64_LIGHTGREEN;
+            }
+        }
+    }
+
+    print_at(6, 21, "[W/A/S/D] MOVE/TURN  [SPACE] DOOR", C64_GRAY);
+    print_at(9, 23, "PRESS [M] TO RETURN TO 3D", C64_GREEN);
 }
